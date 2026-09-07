@@ -19,35 +19,32 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Auto Find and Extract ZIP
+      - name: Extract ZIP Properly
         run: |
           ZIP_NAME=$(ls *.zip | head -n 1)
-          echo "Found ZIP file: $ZIP_NAME"
-          unzip -o "$ZIP_NAME" -d temp_extracted
-
-          INNER_DIR=$(find temp_extracted -maxdepth 1 -mindepth 1 -type d | head -n 1)
-          if [ -n "$INNER_DIR" ]; then
-            cp -rn "$INNER_DIR"/* . || true
-            cp -rn "$INNER_DIR"/.* . 2>/dev/null || true
+          echo "Extracting: $ZIP_NAME"
+          unzip -o "$ZIP_NAME" -d extracted
+          
+          # जर ZIP च्या आत पुन्हा मुख्य प्रोजेक्ट फोल्डर असेल तर
+          if [ -f "extracted/build.gradle.kts" ] || [ -f "extracted/build.gradle" ]; then
+            cp -rn extracted/* . || true
           else
-            cp -rn temp_extracted/* . || true
-            cp -rn temp_extracted/.* . 2>/dev/null || true
+            # सब-फोल्डर शोधून रूटला आणणे
+            PROJ_DIR=$(find extracted -name "build.gradle.kts" -o -name "build.gradle" | head -n 1 | xargs dirname)
+            if [ -n "$PROJ_DIR" ]; then
+              cp -rn "$PROJ_DIR"/* . || true
+            fi
           fi
-
-          rm -rf temp_extracted "$ZIP_NAME"
+          
+          # जर gradlew फाईल नसेल तर Gradle Wrapper तयार करणे
+          if [ ! -f "./gradlew" ]; then
+            echo "Gradlew not found, generating wrapper..."
+            gradle wrapper
+          fi
+          chmod +x ./gradlew
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-
-      - name: Make Gradlew Executable
-        run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-          else
-            echo "Error: gradlew file missing in ZIP!"
-            ls -la
-            exit 1
-          fi
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon
